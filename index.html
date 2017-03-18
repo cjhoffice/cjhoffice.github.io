@@ -4,6 +4,143 @@
     <title>hello</title>
 </head>
 <body>
-    hello world!
+hello world!
 </body>
+<script src="http://cdn.bootcss.com/jquery/3.2.0/jquery.min.js"></script>
+<script>
+
+    /**
+     * xpost 客户端ajaxa请求逻辑封装
+     * 支持的功能特性：
+     * 1.两个形参为url和callback，三个形参为url，param，callback。
+     * 2.支持重复请求的过滤算法，避免表单重复递交等问题，从框架层面上解决表单重复递交问题。
+     * 3.支持URL请求前缀配置。
+     * 4.增加网络异常检测等异常情况的处理之。
+     */
+    window.xpost = function (url, param, callback) {
+
+        //补全网址前缀
+//        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+//            url = __config__.app.ajaxa.url_prefix + url;
+//        }
+
+        //对没有请求参数的情况下的形参转换处理之。
+        if (typeof(param) == 'function') {
+            callback = param;
+            param = {};
+        } else if (param == undefined || param == null || param == NaN) {
+            param = {};
+        } else if (typeof(param) != 'object') {
+            console.log('xpost请求参数格式参入错误必须为json对象!==>');
+            console.log(param);
+            xassert(false);
+            return;
+        }
+
+        //过滤ajaxa短时间重复请求(开始)
+        if (FilterRepeatedAjaxaRequestStart(url)) {
+            return;
+        }
+
+        //对于非登录页面和非注册页面的请求需要补上对应的请求header头部信息(直接从缓存中获取之)
+        var header = undefined;
+        if (true) {
+            header = {
+                'Authorization': 'Bearer ' + 'aaaaaaaaaaaaaaa',
+                'user-id':  111,
+            };
+        } else {
+            //登录页面需要上传dingo api的客户端认证信息，需要强制写在请求参数中(暂不支持配置强制写死在框架中)
+            param.grant_type = 'password';
+            param.client_id = '8ViUmwXIB7CIxXUt';
+            param.client_secret = '6qE4AIuUlkNIOL4WdTcSov29fRqMD3ln';
+        }
+
+        //PC上使用jquery的ajaxa跨域请求方法（方便PC上开发调试后端数据接口）
+        return $.ajax({
+            type: 'post',
+            url: url,
+            data: param,
+            headers: header,
+            crossDomain: true,
+            success: function (data, textStatus) {
+                //过滤ajaxa短时间重复请求(结束)
+                FilterRepeatedAjaxaRequestFinish();
+
+                if (callback) {
+                    //ajaxa返回后置数据处理
+                    AjaxaRespondCallback(url, data, callback);
+                }
+            },
+            error: function (XMLHttpRequest, textStatus, errorThrown) {
+                //过滤ajaxa短时间重复请求(结束)
+                FilterRepeatedAjaxaRequestFinish();
+
+                // (默认: 自动判断 (xml 或 html)) 请求失败时将调用此方法。这个方法有三个参数：XMLHttpRequest 对象，错误信息，（可能）捕获的错误对象。
+                // 通常情况下textStatus和errorThown只有其中一个有值
+                // this; // the options for this ajax request
+                if (callback) {
+                    var code = -1;
+                    var message = '服务器HTTP请求错误';
+                    var data = undefined;
+                    if (XMLHttpRequest.responseJSON && XMLHttpRequest.responseJSON.code && XMLHttpRequest.responseJSON.message) {
+                        code = XMLHttpRequest.responseJSON.code;
+                        message = XMLHttpRequest.responseJSON.message;
+                        data = XMLHttpRequest.responseJSON.data;
+                    }
+                    var ret = {code, message, data};
+                    //ajaxa返回后置数据处理
+                    AjaxaRespondCallback(url, ret, callback);
+                }
+            }
+        });
+    }
+
+    //ajaxa返回后置数据处理
+    function AjaxaRespondCallback(url, ret, callback) {
+        console.log(ret);
+    }
+
+    /**
+     * 表单重复递交过滤判断
+     * 1.应用上不存在表单设计被废弃用了也不能生效（无法进行表单上自动添加auth-key和auth-token信息）
+     * 2.服务器上的请求只允许post操作，并且只能调用xpost接口。
+     * 3.限制应用层面上不合理的短时间多次ajaxa请求，强制应用将这种请求合并为一个在client端进行后端并发请求。
+     * 4.当一个请求没有结束之前，禁止第二次ajaxa请求，彻底杜绝掉表单重复递交问题。
+     */
+    function FilterRepeatedAjaxaRequestStart(url) {
+//        console.log(new Date() + '请求->' + url);
+
+        //上次应用请求的数据缓存处理
+        if (window.__xpost__ === undefined) {
+            window.__xpost__ = {
+                url: '',
+                finished: true,
+            };
+        }
+
+        if (window.__xpost__.url != url) {
+            window.__xpost__.url = url;
+            window.__xpost__.finished = false;
+        } else if (!window.__xpost__.finished) {
+            console.log('重复请求未完成过滤之！' + url);
+            return true;
+        } else {
+            window.__xpost__.finished = false;
+        }
+        return false;
+    }
+
+    //重复请求在ajaxa回调结束时候的后置处理恢复全局状态
+    function FilterRepeatedAjaxaRequestFinish() {
+//        console.log('========================================');
+//        console.log(new Date() + '请求处理结束' + window.__xpost__.url);
+//        console.log('========================================');
+        window.__xpost__.url = '';
+        window.__xpost__.finished = true;
+    }
+
+
+    xpost('http://adminx.efanzhuan.com',{xxx:'11111'});
+</script>
 </html>
